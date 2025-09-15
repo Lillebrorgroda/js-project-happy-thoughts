@@ -200,17 +200,25 @@ export const App = () => {
         },
         body: JSON.stringify(updatedData),
       })
+
+      const data = await response.json()
+
       if (response.status === 401) {
-        setError("Session expired. Please log in again.")
+        setError(data.message || "Session expired. Please log in again.")
         handleLogout()
         return false
       }
       if (response.status === 403) {
-        setError("You are not authorized to edit this thought.")
+        setError(data.message || "You are not authorized to edit this thought.")
+        return false
+      }
+
+      if (response.status === 404) {
+        setError(data.message || "Thought not found.")
         return false
       }
       if (!response.ok) {
-        throw new Error("Failed to edit thought")
+        throw new Error(data.message || "Failed to edit thought")
       }
 
       await fetchMessages()
