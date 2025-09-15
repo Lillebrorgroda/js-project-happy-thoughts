@@ -63,7 +63,28 @@ const LoginPrompt = styled.div`
     cursor: pointer;
   }
   `
-//"https://happy-thoughts-api-4ful.onrender.com/thoughts"
+const ErrorMessage = styled.div`
+  background-color: #ffe6e6;
+  border: 1px solid #ff9999;
+  color: #cc0000;
+  padding: 10px;
+  border-radius: 5px;
+  margin: 10px auto;
+  max-width: 320px;
+  text-align: center;
+`
+
+const SuccessMessage = styled.div`
+  background-color: #e6ffe6;
+  border: 1px solid #99ff99;
+  color: #006600;
+  padding: 10px;
+  border-radius: 5px;
+  margin: 10px auto;
+  max-width: 320px;
+  text-align: center;
+`
+
 
 export const App = () => {
   const API_URL = "https://lillebrorgrodas-first-api.onrender.com/thoughts"
@@ -71,7 +92,21 @@ export const App = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [messageText, setMessageText] = useState("")
   const [user, setUser] = useState(null)
-  const [showAuth, setShowAuth] = useState(false);
+  const [showAuth, setShowAuth] = useState(false)
+  const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
+  const [category, setCategory] = useState("Other")
+
+  useEffect(() => {
+    if (error || success) {
+      const timer = setTimeout(() => {
+        setError('')
+        setSuccess('')
+      }, 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [error, success])
+
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken')
@@ -86,7 +121,7 @@ export const App = () => {
     fetch(API_URL)
       .then((response) => response.json())
       .then((data) => {
-        setMessages(data.response)
+        setMessages(data.response || [])
         setIsLoading(false)
       })
       .catch((error) => {
@@ -128,7 +163,11 @@ export const App = () => {
         "Content-Type": "application/json",
         Authorization: user.accessToken,
       },
-      body: JSON.stringify({ message: messageText, createdBy: user.userId }),
+      body: JSON.stringify({
+        message: messageText,
+        category: category,
+        createdBy: user.userId
+      }),
     })
       .then((res) => {
         if (res.status === 401) {
@@ -142,14 +181,83 @@ export const App = () => {
         if (data) {
           fetchMessages()
           setMessageText("")
+          setCategory("Other")
+          setSuccess("Message posted successfully!")
         }
       })
       .catch((error) => console.error("Error posting message:", error))
   }
 
+  const handleEditThought = async (thoughtId, updatedData) => {
+    if (!user) return false
+
+    try {
+      const response = await fetch(`${API_URL}/${thoughtId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: user.accessToken,
+        },
+        body: JSON.stringify(updatedData),
+      })
+      if (response.status === 401) {
+        setError("Session expired. Please log in again.")
+        handleLogout()
+        return false
+      }
+      if (response.status === 403) {
+        setError("You are not authorized to edit this thought.")
+        return false
+      }
+      if (!response.ok) {
+        throw new Error("Failed to edit thought")
+      }
+
+      await fetchMessages()
+      setSuccess("Thought updated successfully!")
+      return true
+    } catch (error) {
+      console.error("Error editing thought:", error)
+      setError("An error occurred while editing the thought.")
+      return false
+    }
+
+  }
+
+  const handleDeleteThought = async (thoughtId) => {
+    if (!user) return
+    try {
+      const response = await fetch(`${API_URL}/${thoughtId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: user.accessToken,
+        },
+      })
+
+      if (response.status === 401) {
+        setError("Session expired. Please log in again.")
+        handleLogout()
+        return
+      }
+      if (response.status === 403) {
+        setError("You are not authorized to delete this thought.")
+        return
+      }
+      if (!response.ok) {
+        throw new Error("Failed to delete thought")
+      }
+      await fetchMessages()
+      setSuccess("Thought deleted successfully!")
+    } catch (error) {
+      console.error("Error deleting thought:", error)
+      setError("An error occurred while deleting the thought.")
+    }
+  }
+
   const handleAuthSuccess = (authData) => {
     setUser(authData)
     setShowAuth(false)
+    setSuccess("Successfully logged in!")
   }
 
   const handleLogout = () => {
@@ -157,6 +265,7 @@ export const App = () => {
     localStorage.removeItem("userId")
     setUser(null)
     setShowAuth(false)
+    setSuccess("Successfully logged out!")
   }
 
   const handleLoginPrompt = () => {
@@ -170,6 +279,8 @@ export const App = () => {
       <GlobalStyle />
       {user && <UserHeader user={user} onLogout={handleLogout} />}
       <h1>Happy Thoughts</h1>
+      {error && <ErrorMessage>{error}</ErrorMessage>}
+      {success && <SuccessMessage>{success}</SuccessMessage>}
 
       {showAuth ? (
         <AuthForm onAuthSuccess={handleAuthSuccess} />
@@ -180,6 +291,9 @@ export const App = () => {
               messageText={messageText}
               setMessageText={setMessageText}
               onSubmit={handleMessageSubmit}
+              category={category}
+              setCategory={setCategory}
+
             />
           </StyledCard>
         ) : (
@@ -203,6 +317,10 @@ export const App = () => {
               createdAt={message.date}
               onLike={() => handleLike(message._id)}
               isNewest={index === 0}
+              thought={message}
+              user={user}
+              onEdit={handleEditThought}
+              onDelete={handleDeleteThought}
             />
           ))
         ) : (
