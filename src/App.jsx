@@ -4,6 +4,9 @@ import MessageForm from "./components/MessageForm";
 import MessageItem from "./components/MessageItem";
 import GlobalStyle from "./styles/GlobalStyle";
 import Footer from "./components/Footer";
+import AuthForm from "./components/AuthForm";
+import UserHeader from "./components/UserHeader";
+
 
 
 const StyledCard = styled.div`
@@ -35,9 +38,31 @@ const MessageList = styled.div`
   border: 1px solid #aaa;
   background-color: #f8f8f8;
   box-sizing: border-box;
-
 `
 
+const LoginPrompt = styled.div`
+  text-align: center;
+  padding: 20px;
+  background-color: #f0f8ff;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  margin: 10px auto;
+  max-width: 320px;
+
+  p {
+    margin-bottom: 15px;
+    color: #555
+  }
+
+  button {
+    padding: 10px 20px;
+    background-color: #f78a8a;
+    border: none;
+    border-radius: 20px;
+    font-weight: bold;
+    cursor: pointer;
+  }
+  `
 //"https://happy-thoughts-api-4ful.onrender.com/thoughts"
 
 export const App = () => {
@@ -45,6 +70,16 @@ export const App = () => {
   const [messages, setMessages] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [messageText, setMessageText] = useState("")
+  const [user, setUser] = useState(null)
+  const [showAuth, setShowAuth] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem('accessToken')
+    const userId = localStorage.getItem('userId')
+    if (token && userId) {
+      setUser({ accessToken: token, userId })
+    }
+  }, [])
 
   const fetchMessages = () => {
     setIsLoading(true);
@@ -82,35 +117,84 @@ export const App = () => {
   const handleMessageSubmit = (event) => {
     event.preventDefault()
 
+    if (!user) {
+      setShowAuth(true)
+      return
+    }
+
     fetch(API_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: messageText }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: user.accessToken,
+      },
+      body: JSON.stringify({ message: messageText, createdBy: user.userId }),
     })
-      .then((res) => res.json())
-      .then(() => {
-        fetchMessages()
-        setMessageText("")
+      .then((res) => {
+        if (res.status === 401) {
+          alert("Session expired. Please log in again.")
+          handleLogout()
+          throw new Error("Unauthorized")
+        }
+        return res.json()
+      })
+      .then((data) => {
+        if (data) {
+          fetchMessages()
+          setMessageText("")
+        }
       })
       .catch((error) => console.error("Error posting message:", error))
   }
+
+  const handleAuthSuccess = (authData) => {
+    setUser(authData)
+    setShowAuth(false)
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem("accessToken")
+    localStorage.removeItem("userId")
+    setUser(null)
+    setShowAuth(false)
+  }
+
+  const handleLoginPrompt = () => {
+    setShowAuth(true)
+  }
+
 
 
   return (
     <>
       <GlobalStyle />
+      {user && <UserHeader user={user} onLogout={handleLogout} />}
       <h1>Happy Thoughts</h1>
-      <StyledCard>
-        <MessageForm
-          messageText={messageText}
-          setMessageText={setMessageText}
-          onSubmit={handleMessageSubmit}
-        />
-      </StyledCard>
+
+      {showAuth ? (
+        <AuthForm onAuthSuccess={handleAuthSuccess} />
+      ) : (<>
+        {user ? (
+          <StyledCard>
+            <MessageForm
+              messageText={messageText}
+              setMessageText={setMessageText}
+              onSubmit={handleMessageSubmit}
+            />
+          </StyledCard>
+        ) : (
+          <LoginPrompt>
+            <p>Please log in to post your happy thoughts!</p>
+            <button onClick={handleLoginPrompt}>Log In / Register</button>
+          </LoginPrompt>
+        )}
+      </>)}
+
+
       <MessageList>
         {isLoading ? (
           <p>Loading messages...</p>
-        ) : (
+        ) : messages.length > 0 ? (
           messages.map((message, index) => (
             <MessageItem
               key={message._id}
@@ -121,6 +205,8 @@ export const App = () => {
               isNewest={index === 0}
             />
           ))
+        ) : (
+          <p>No messages yet. Be the first to post!</p>
         )}
       </MessageList>
       <Footer />
