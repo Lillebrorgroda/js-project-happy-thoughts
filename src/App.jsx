@@ -234,17 +234,25 @@ export const App = () => {
         },
       })
 
+      const data = await response.json()
+
       if (response.status === 401) {
         setError("Session expired. Please log in again.")
         handleLogout()
         return
       }
       if (response.status === 403) {
-        setError("You are not authorized to delete this thought.")
+        setError(data.message || "You are not authorized to delete this thought.")
         return
       }
+
+      if (response.status === 404) {
+        setError(data.message || "Thought not found.")
+        return
+      }
+
       if (!response.ok) {
-        throw new Error("Failed to delete thought")
+        throw new Error(data.message || "Failed to delete thought")
       }
       await fetchMessages()
       setSuccess("Thought deleted successfully!")
